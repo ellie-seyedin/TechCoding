@@ -11,9 +11,12 @@ This project is an ETL (Extract, Transform, Load) pipeline designed to process a
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
 - [Running the Pipeline](#running-the-pipeline)
+- [Scheduling](#scheduling)
+- [Monitoring and Alerting](#monitoring-and-alerting)
 - [CI/CD Pipeline](#ci-cd-pipeline)
 - [Data Quality and Traceability](#data-quality-and-traceability)
 - [Contributing](#contributing)
+
 
 ## Features
 
@@ -22,14 +25,20 @@ This project is an ETL (Extract, Transform, Load) pipeline designed to process a
 - Fuzzy matching for reconciling company names.
 - Load data into a PostgreSQL database.
 - Track metadata for each data point.
+- Scheduled runs with Airflow.
+- Monitoring and alerting with Prometheus and Grafana.
 
 ## Technology Stack
 
 - **Python**: Core programming language.
-- **PySpark**: Data processing.
+- **PySpark**: For scalable data processing.
 - **PostgreSQL**: Data warehouse.
-- **Pandas**: Initial data ingestion.
-- **GitHub Actions**: CI/CD pipeline.
+- **Pandas**: For initial data ingestion if necessary.
+- **GitHub**: Version control for code and configurations.
+- **CLI Tools and CI/CD Integration**: For automation and deployment (e.g., using Jenkins or GitHub Actions).
+- **Apache Airflow**: Scheduling.
+- **Prometheus**: Monitoring.
+- **Grafana**: Alerting.
 
 ## Getting Started
 
@@ -82,6 +91,112 @@ This project is an ETL (Extract, Transform, Load) pipeline designed to process a
     python etl_pipeline.py
     ```
 
+## Scheduling
+
+1. **Install Airflow**:
+    ```sh
+    pip install apache-airflow
+    pip install apache-airflow-providers-docker
+    ```
+
+2. **Initialize Airflow**:
+    ```sh
+    export AIRFLOW_HOME=~/airflow
+    airflow db init
+    ```
+
+3. **Create DAG**:
+    Create a file named `etl_dag.py` in the `~/airflow/dags` directory:
+    ```python
+    from airflow import DAG
+    from airflow.providers.docker.operators.docker import DockerOperator
+    from airflow.utils.dates import days_ago
+    from datetime import timedelta
+
+    default_args = {
+        'owner': 'airflow',
+        'depends_on_past': False,
+        'email_on_failure': True,
+        'email_on_retry': False,
+        'email': 'your-email@example.com',
+        'retries': 1,
+        'retry_delay': timedelta(minutes=5),
+    }
+
+    dag = DAG(
+        'etl_pipeline',
+        default_args=default_args,
+        description='An ETL pipeline DAG',
+        schedule_interval=timedelta(days=1),
+        start_date=days_ago(1),
+        tags=['etl'],
+    )
+
+    etl_task = DockerOperator(
+        task_id='run_etl_pipeline',
+        image='etl-pipeline:latest',
+        auto_remove=True,
+        command='python etl_pipeline.py',
+        docker_url='unix://var/run/docker.sock',
+        network_mode='bridge',
+        dag=dag,
+    )
+
+    etl_task
+    ```
+
+4. **Start Airflow Scheduler and Web Server**:
+    ```sh
+    airflow scheduler &
+    airflow webserver &
+    ```
+
+5. **Access Airflow Web Interface**:
+    Open your browser and go to `http://localhost:8080` to manage and monitor your DAGs.
+
+## Monitoring and Alerting
+
+1. **Install Prometheus**:
+    ```sh
+    docker run -d --name=prometheus -p 9090:9090 prom/prometheus
+    ```
+
+2. **Configure Prometheus**:
+    Create a `prometheus.yml` configuration file:
+    ```yaml
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+      - job_name: 'airflow'
+        static_configs:
+          - targets: ['localhost:8080']
+    ```
+
+3. **Mount Configuration and Restart Prometheus**:
+    ```sh
+    docker run -d --name=prometheus -p 9090:9090 -v /path/to/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+    ```
+
+4. **Install Grafana**:
+    ```sh
+    docker run -d --name=grafana -p 3000:3000 grafana/grafana
+    ```
+
+5. **Access Grafana**:
+    Open your browser and go to `http://localhost:3000`. Default login is `admin/admin`.
+
+6. **Add Prometheus as Data Source**:
+    - Go to Grafana, navigate to Configuration > Data Sources > Add Data Source.
+    - Select Prometheus and configure the URL as `http://localhost:9090`.
+
+7. **Create Dashboards**:
+    - Create dashboards to visualize ETL metrics, such as job success rate, duration, and error rates.
+
+8. **Setup Alerts**:
+    - Configure alerts in Grafana based on your metrics.
+    - Use email or other notification channels to receive alerts.
+
 ## CI/CD Pipeline
 
 This project uses GitHub Actions for continuous integration and deployment.
@@ -103,10 +218,33 @@ This project uses GitHub Actions for continuous integration and deployment.
 
 ## Data Quality and Traceability
 
-- **Data Cleaning**: Uses PySpark for data cleaning and normalization.
-- **Fuzzy Matching**: Reconciles company names using fuzzy matching.
-- **Metadata Tracking**: Maintains metadata in PostgreSQL for traceability.
-- **Error Handling**: Implements automated error detection and manual correction mechanisms.
+- **Data Quality**:
+    - Use PySpark for data cleaning and validation.
+    - Regularly monitor data quality metrics.
+
+- **Data Traceability**:
+    - Maintain detailed metadata in PostgreSQL.
+    - Track source file, load timestamp, and transformation history.
+    - Implement logging in the ETL process.
+
+- **Error Correction**:
+    - Implement automated error detection and reporting.
+    - Allow manual intervention for detected errors.
+
+## Data Integration
+
+- **Data Ingestion**:
+    - Load CSV and XLSX files using PySpark.
+
+- **Data Cleaning and Standardization**:
+    - Clean and normalize data using PySpark.
+
+- **Data Transformation**:
+    - Use fuzzy matching to reconcile company names.
+    - Generate unique IDs for companies and assets.
+
+- **Unified Schema**:
+    - Define a unified schema in PostgreSQL.
 
 ## Contributing
 
@@ -136,3 +274,4 @@ Contributions are welcome! Please follow these steps:
     ```
 
 6. **Create a Pull Request**.
+
